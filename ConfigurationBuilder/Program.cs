@@ -69,7 +69,7 @@ var configuration = new CheckerConfiguration
                         {
                             new MustNotContain
                             {
-                                StringToCheck = "10.10.34.34" // peyvandha.ir
+                                StringToCheck = "10.10.34.34"
                             }
                         }
                     },
