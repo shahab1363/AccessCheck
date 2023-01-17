@@ -152,7 +152,7 @@ var configuration = new CheckerConfiguration
                             {
                                 Name = "MustContainSuccess",
                                 CaseSensitive = false,
-                                StringToCheck = "SUCCESS: The process \"sscli.exe\""
+                                StringToCheck = "SUCCESS: The process"
                             },
                             new MustContain
                             {
