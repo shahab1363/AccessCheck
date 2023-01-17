@@ -5,7 +5,7 @@
     <TargetFramework>net6.0</TargetFramework>
     <ImplicitUsings>enable</ImplicitUsings>
     <Nullable>enable</Nullable>
-    <BaseOutputPath>C:\Users\shaha\source\repos\AccessCheck\Output\CheckerApp</BaseOutputPath>
+    <BaseOutputPath>..\Output\CheckerApp</BaseOutputPath>
   </PropertyGroup>
 
   <ItemGroup>
