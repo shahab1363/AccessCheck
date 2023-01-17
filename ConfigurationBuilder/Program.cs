@@ -86,11 +86,8 @@ var configuration = new CheckerConfiguration
                         {
                             new MustContain
                             {
+                                Name = "MustContainsFBCDN.NET",
                                 StringToCheck = "fbcdn.net/"
-                            },
-                            new MustNotContain
-                            {
-                                StringToCheck = "peyvandha"
                             },
                             new ExpectStatusCodes
                             {
@@ -120,112 +117,8 @@ var configuration = new CheckerConfiguration
                         Order = 1004,
                         HostNames = new[] { "facebook.com", "fb.com" },
                     },
-                    //new TCPCheckConfiguration
-                    //{
-                    //    Name = "TCPCheck",
-                    //    Uri = new Uri("https://facebook.com"),
-                    //    Port = 443,
-                    //    TextValidations = new ITextValidation[]
-                    //    {
-                    //        new MustContain
-                    //        {
-                    //            StringToCheck = "fbcdn.net/"
-                    //        },
-                    //        new MustNotContain
-                    //        {
-                    //            StringToCheck = "peyvandha"
-                    //        },
-                    //    },
-                    //},
-                    //new RawSocketCheckConfiguration
-                    //{
-                    //    Name = "RawSocketCheck",
-                    //    Uri = new Uri("https://facebook.com"),
-                    //    Port = 443,
-                    //    SocketType = System.Net.Sockets.SocketType.Stream,
-                    //    ProtocolType = System.Net.Sockets.ProtocolType.Tcp,
-                    //    TextValidations = new ITextValidation[]
-                    //    {
-                    //        new MustContain
-                    //        {
-                    //            StringToCheck = "fbcdn.net/"
-                    //        },
-                    //        new MustNotContain
-                    //        {
-                    //            StringToCheck = "peyvandha"
-                    //        },
-                    //    },
-                    //},
                 }
             },
-            //new CheckGroup
-            //{
-            //    Name = "Telegram",
-            //    CheckConfigurations = new Checker.Checks.ICheckConfiguration[]
-            //    {
-            //        new DnsCheckConfiguration
-            //        {
-            //            Name = "DNSCheck",
-            //            HostNameOrAddress = "t.me",
-            //            IPValidations = new[]
-            //            {
-            //                new MustContain
-            //                {
-            //                    StringToCheck = "149.154.167.99" // t.me
-            //                },
-            //                new MustNotContain
-            //                {
-            //                    StringToCheck = "10.10.34.34" // peyvandha.ir
-            //                }
-            //            }
-            //        },
-            //        new HttpCheckConfiguration
-            //        {
-            //            Name = "HttpCheck_t.me",
-            //            HttpMethod = Checker.Checks.HttpCheck.HttpMethod.Get,
-            //            Uris = new[] {
-            //                new Uri("https://t.me"),
-            //            },
-            //            HttpValidations = new IHttpValidation[]
-            //            {
-            //                new ExpectStatusCodes
-            //                {
-            //                    ExpectedStatusCodes = new[] { 301, 302 }
-            //                }
-            //            },
-            //        },
-            //        new HttpCheckConfiguration
-            //        {
-            //            Name = "HttpCheck_telegram.org",
-            //            HttpMethod = Checker.Checks.HttpCheck.HttpMethod.Get,
-            //            Uris = new[] {
-            //                new Uri("https://t.me"),
-            //            },
-            //            HttpValidations = new IHttpValidation[]
-            //            {
-            //                new MustContain
-            //                {
-            //                    StringToCheck = "Telegram Messenger"
-            //                },
-            //                new MustNotContain
-            //                {
-            //                    StringToCheck = "peyvandha"
-            //                },
-            //                new ExpectStatusCodes
-            //                {
-            //                    ExpectedStatusCodes = new[] { 200 }
-            //                }
-            //            },
-            //        },
-            //        new TLSCheckConfiguration
-            //        {
-            //            Name = "TLSCheck",
-            //            HostName = "telegram.org",
-            //            SslProtocol = System.Security.Authentication.SslProtocols.None,
-            //            EncryptionPolicy = System.Net.Security.EncryptionPolicy.RequireEncryption
-            //        },
-            //    }
-            //},
         },
         FinishBeforeNextStep = true,
         SendReport = true,
@@ -248,11 +141,24 @@ var configuration = new CheckerConfiguration
                         KillIfRunningAfterWait = true,
                         CaptureStdOut = true,
                         CaptureStdError = true,
-                        ExternalAppValidations = new[]
+                        ExternalAppValidations = new IExternalAppValidation[]
                         {
                             new ExpectExitCode
                             {
+                                Name = "ExpectExitCode0",
                                 ExpectedExitCodes = new int?[]{ 0 },
+                            },
+                            new MustContain
+                            {
+                                Name = "MustContainSuccess",
+                                CaseSensitive = false,
+                                StringToCheck = "SUCCESS: The process \"sscli.exe\""
+                            },
+                            new MustContain
+                            {
+                                Name = "MustContainHasBeenTerminated",
+                                CaseSensitive = false,
+                                StringToCheck = "has been terminated."
                             }
                         }
                     }
@@ -289,19 +195,6 @@ var configuration = new CheckerConfiguration
 };
 
 var serializationOptions = SerializationExtensions.GetDefaultSerializationOptions(true);
-//    new JsonSerializerOptions
-//{
-//    WriteIndented = true,
-//    DefaultIgnoreCondition = JsonIgnoreCondition.WhenWritingNull | JsonIgnoreCondition.WhenWritingDefault,
-//    Converters = {
-//    //    new JsonConverterForICheckConfiguration(),
-//    //    new JsonConverterForIReportConfiguration(),
-//    //    new JsonConverterForValidations<IHttpValidation>(),
-//    //    new JsonConverterForValidations<ITextValidation>(),
-//    //    new JsonConverterForValidations<IIPValidation>(),
-//        new JsonStringEnumConverter()
-//    }
-//};
 
 var configJson = JsonSerializer.Serialize(configuration, serializationOptions);
 
