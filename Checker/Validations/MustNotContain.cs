@@ -5,7 +5,7 @@ namespace Checker.Validations
 {
     public class MustNotContain : MustContain
     {
-        public override string Name => this.GetType().Name;
+        public override string Name { get; set; } = nameof(MustNotContain);
 
         internal override CheckResult CheckForString(string httpResponseBody)
         {

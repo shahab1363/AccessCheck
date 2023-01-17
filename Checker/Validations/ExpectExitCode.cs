@@ -4,7 +4,7 @@ namespace Checker.Validations
 {
     public class ExpectExitCode : IExternalAppValidation
     {
-        public string Name => this.GetType().Name;
+        public string Name { get; set; } = nameof(ExpectExitCode);
         public int?[] ExpectedExitCodes { get; set; }
 
         public Task<CheckResult> Validate(int? exitCode, string? stdOut, string? stdError)

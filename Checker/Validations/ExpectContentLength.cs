@@ -4,7 +4,7 @@ namespace Checker.Validations
 {
     public class ExpectContentLength : IHttpValidation
     {
-        public virtual string Name => this.GetType().Name;
+        public string Name { get; set; } = nameof(ExpectContentLength);
         public int ExpectedContentLength { get; set; }
         public float ThresholdPercent { get; set; }
 

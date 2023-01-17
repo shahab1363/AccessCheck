@@ -3,9 +3,9 @@ using System.Net;
 
 namespace Checker.Validations
 {
-    public class MustContain : IHttpValidation, ITextValidation, IIPValidation
+    public class MustContain : IHttpValidation, ITextValidation, IIPValidation, IExternalAppValidation
     {
-        public  virtual string Name => this.GetType().Name;
+        public virtual string Name { get; set; } = nameof(MustContain);
         public string StringToCheck { get; set; }
         public bool CaseSensitive { get; set; }
 
@@ -39,6 +39,11 @@ namespace Checker.Validations
             }
 
             return Task.FromResult(new CheckResult(CheckResultEnum.Failure, $"{Name}: Cannot find {StringToCheck} ({(CaseSensitive ? "" : "not ")} case sesitive) in IPHostEntry"));
+        }
+
+        public Task<CheckResult> Validate(int? exitCode, string? stdOut, string? stdError)
+        {
+            return Task.FromResult(CheckForString(stdOut ?? stdError ?? string.Empty));
         }
 
         internal virtual CheckResult CheckForString(string httpResponseBody)

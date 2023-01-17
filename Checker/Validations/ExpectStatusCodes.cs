@@ -6,7 +6,7 @@ namespace Checker.Validations
 {
     public class ExpectStatusCodes : IHttpValidation
     {
-        public string Name => this.GetType().Name;
+        public string Name { get; set; } = nameof(ExpectStatusCodes);
         public int[] ExpectedStatusCodes { get; set; }
 
         public Task<CheckResult> Validate(HttpResponseMessage httpResponse, string httpResponseBody)
