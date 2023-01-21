@@ -396,7 +396,7 @@ namespace CheckerApp.Runner.CheckerRunner
                 .OrderBy(kv => kv.Key.Order)
                 .SelectMany(kv => kv.Value
                     .Where(c => c.ShouldRun())
-                    .OrderBy(c => c.Order)
+                    .OrderBy(c => c.Configuration.Order)
                     .Select(c => new KeyValuePair<CheckGroup, ICheck>(kv.Key, c))
                 );
 
@@ -426,44 +426,62 @@ namespace CheckerApp.Runner.CheckerRunner
                 { "checkDuration", checkDuration.ToString() },
             };
 
-            var checkResultsToReport =
+            var allCheckResultsToReport =
                 checkResults
-                .SelectMany(x => x.Value.Select(c => new KeyValuePair<string, CheckResult>($"{x.Key.Name}.{c.Key.Name}({c.Key.Type})", c.Value)))
+                .SelectMany(x => x.Value.Select(c => (ICheck: c.Key, Name: $"{x.Key.Name}.{c.Key.Configuration.Name}({c.Key.Configuration.Type})", CheckResult: c.Value, Reported: false)))
                 .ToList();
 
-            if (!checkResultsToReport.Any())
+            if (!allCheckResultsToReport.Any())
             {
                 return;
             }
 
-            foreach (var checkResult in checkResultsToReport)
+            foreach (var checkResult in allCheckResultsToReport)
             {
-                addedTags.ForEach(kv => checkResult.Value.Tags.Add(kv.Key, kv.Value));
+                addedTags.ForEach(kv => checkResult.CheckResult.Tags.TryAdd(kv.Key, kv.Value));
+
             }
 
             var tasksToWait = new List<Task>();
 
             foreach (var reportConfiguration in configuration.ReportConfigurations)
             {
+                var reportGroups = reportConfiguration.Groups?.Any() == true
+                        ? reportConfiguration.Groups
+                        : new[] { "*" };
+
+                var checksToReport = allCheckResultsToReport
+                    .Where(x => x.Reported == false)
+                    .Where(x =>
+                    {
+                        var checkReportGroups = x.ICheck.Configuration.ReportGroups?.Any() == true ? x.ICheck.Configuration.ReportGroups : new[] { "*" };
+                        return reportGroups.Intersect(checkReportGroups).Any();
+                    })
+                    .ToList();
+
+                var reportListKVs = checksToReport.Select(x => new KeyValuePair<string, CheckResult>(x.Name, x.CheckResult));
+
                 switch (reportConfiguration.Type)
                 {
                     case Checker.Reports.ReportTypeEnum.Webhook:
                         if (reportConfiguration is WebhookReportConfiguration webhookReportConfiguration)
                         {
                             var webhookReport = new WebhookReport(webhookReportConfiguration, HttpClientProvider, clientId);
-                            tasksToWait.Add(webhookReport.ReportResult(checkResultsToReport, cancellationToken));
+                            tasksToWait.Add(webhookReport.ReportResult(reportListKVs, cancellationToken));
                         }
                         break;
                     case Checker.Reports.ReportTypeEnum.AppInsight:
                         if (reportConfiguration is AppInsightReportConfiguration appInsightsReportConfiguration)
                         {
                             var appInsightReport = new AppInsightReport(appInsightsReportConfiguration, clientId);
-                            tasksToWait.Add(appInsightReport.ReportResult(checkResultsToReport, cancellationToken));
+                            tasksToWait.Add(appInsightReport.ReportResult(reportListKVs, cancellationToken));
                         }
                         break;
                     default:
                         break;
                 }
+
+                checksToReport.ForEach(x => x.Reported = true);
             }
 
             await Task.WhenAll(tasksToWait);

@@ -16,6 +16,7 @@ namespace Checker.Checks.PingCheck
         public IIPValidation[] IPValidations { get; set; }
         public int PerHostSuccessThresholdPercent { get; set; } = 99;
         public int SuccessThresholdPercent { get; set; } = 99;
+        public string[] ReportGroups { get; set; } = new[] { "*" };
     }
 }
 

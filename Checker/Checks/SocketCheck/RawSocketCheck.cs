@@ -14,9 +14,7 @@ Connection: Close
 
 ";
 
-        public virtual CheckTypeEnum Type => CheckTypeEnum.RawSocket;
-        public string Name => configuration.Name;
-        public int Order => configuration.Order;
+        public ICheckConfiguration Configuration => configuration;
         public TimeSpan? MinInterval => this.minInterval;
         public DateTimeOffset LastRun { get; private set; } = DateTimeOffset.MinValue;
 

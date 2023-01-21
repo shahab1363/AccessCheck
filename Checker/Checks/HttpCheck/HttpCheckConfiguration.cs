@@ -20,6 +20,7 @@ namespace Checker.Checks.HttpCheck
         public int PerUriSuccessThresholdPercent { get; set; } = 99;
         public int SuccessThresholdPercent { get; set; } = 99;
         public Uri ProxyUri { get; set; }
+        public string[] ReportGroups { get; set; } = new[] { "*" };
     }
 }
 

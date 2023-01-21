@@ -30,6 +30,7 @@ namespace CheckerLib.Checks.ExternalAppCheck
         public TimeSpan TimeOut { get; set; } = TimeSpan.FromHours(1);
         public IExternalAppValidation[] ExternalAppValidations { get; set; }
         public int SuccessThresholdPercent { get; set; } = 99;
+        public string[] ReportGroups { get; set; } = new[] { "*" };
     }
 }
 

@@ -6,9 +6,7 @@ namespace Checker.Checks.HttpCheck
 {
     public class HttpCheck : ICheck
     {
-        public CheckTypeEnum Type => CheckTypeEnum.Http;
-        public string Name => configuration.Name;
-        public int Order => configuration.Order;
+        public ICheckConfiguration Configuration => configuration;
         public TimeSpan? MinInterval => this.minInterval;
         public DateTimeOffset LastRun { get; private set; } = DateTimeOffset.MinValue;
 

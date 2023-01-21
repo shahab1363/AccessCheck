@@ -7,9 +7,7 @@ namespace Checker.Checks.DnsCheck
 {
     public class DnsCheck : ICheck
     {
-        public CheckTypeEnum Type => CheckTypeEnum.DNS;
-        public string Name => configuration.Name;
-        public int Order => configuration.Order;
+        public ICheckConfiguration Configuration => configuration;
         public TimeSpan? MinInterval => this.minInterval;
         public DateTimeOffset LastRun { get; private set; } = DateTimeOffset.MinValue;
 

@@ -9,5 +9,6 @@ namespace Checker.Checks
     {
         public CheckTypeEnum Type { get; }
         public TimeSpan? MinInterval { get; }
+        public string[] ReportGroups { get; }
     }
 }

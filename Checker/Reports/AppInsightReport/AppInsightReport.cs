@@ -9,7 +9,7 @@ namespace Checker.Reports.AppInsightReport
     // todo: add app insight tags based on user network information
     public class AppInsightReport : IReport
     {
-        public ReportTypeEnum Type => ReportTypeEnum.AppInsight;
+        public IReportConfiguration Configuration => configuration;
 
         private readonly AppInsightReportConfiguration configuration;
         private readonly string clientUID;

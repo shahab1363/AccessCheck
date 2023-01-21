@@ -6,7 +6,7 @@ namespace Checker.Reports.WebhookReport
 {
     public class WebhookReport : IReport
     {
-        public ReportTypeEnum Type => ReportTypeEnum.Webhook;
+        public IReportConfiguration Configuration => configuration;
 
         private readonly WebhookReportConfiguration configuration;
         private readonly Func<HttpClient> httpClientProvider;

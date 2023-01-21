@@ -10,5 +10,6 @@
         public Dictionary<string, string> Headers { get; set; }
         public TimeSpan PerUriTimeOut { get; set; } = TimeSpan.FromSeconds(90);
         public TimeSpan TimeOut { get; set; } = TimeSpan.FromSeconds(300);
+        public string[] Groups { get; set; } = new[] { "*" };
     }
 }

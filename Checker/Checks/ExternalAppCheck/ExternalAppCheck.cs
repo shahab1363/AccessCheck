@@ -7,9 +7,7 @@ namespace CheckerLib.Checks.ExternalAppCheck
 {
     public class ExternalAppCheck : ICheck
     {
-        public CheckTypeEnum Type => CheckTypeEnum.ExternalApp;
-        public string Name => configuration.Name;
-        public int Order => configuration.Order;
+        public ICheckConfiguration Configuration => configuration;
         public TimeSpan? MinInterval => this.minInterval;
         public DateTimeOffset LastRun { get; private set; } = DateTimeOffset.MinValue;
 

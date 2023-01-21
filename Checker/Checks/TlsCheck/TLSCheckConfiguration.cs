@@ -16,6 +16,7 @@ namespace Checker.Checks.TlsCheck
         public TimeSpan TimeOut { get; set; } = TimeSpan.FromSeconds(30);
         public SslProtocols SslProtocol { get; set; }
         public EncryptionPolicy EncryptionPolicy { get; set; } = EncryptionPolicy.RequireEncryption;
+        public string[] ReportGroups { get; set; } = new[] { "*" };
     }
 }
 

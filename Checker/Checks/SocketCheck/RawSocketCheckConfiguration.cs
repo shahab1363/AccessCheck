@@ -19,6 +19,7 @@ namespace Checker.Checks.SocketCheck
         public TimeSpan TimeOut { get; set; } = TimeSpan.FromSeconds(30);
         public ITextValidation[] TextValidations { get; set; }
         public int SuccessThresholdPercent { get; set; } = 99;
+        public string[] ReportGroups { get; set; } = new[] { "*" };
     }
 }
 

@@ -8,9 +8,7 @@ namespace Checker.Checks.TlsCheck
 {
     public class TLSCheck : ICheck
     {
-        public virtual CheckTypeEnum Type => CheckTypeEnum.TLS;
-        public string Name => configuration.Name;
-        public int Order => configuration.Order;
+        public ICheckConfiguration Configuration => configuration;
         public TimeSpan? MinInterval => this.minInterval;
         public DateTimeOffset LastRun { get; private set; } = DateTimeOffset.MinValue;
 
