@@ -12,7 +12,6 @@ using CheckerLib.Checks.ExternalAppCheck;
 using CheckerLib.Common.Helpers;
 using System.Collections.Concurrent;
 using System.Diagnostics;
-using System.Runtime.CompilerServices;
 
 namespace CheckerApp.Runner.CheckerRunner
 {
@@ -428,7 +427,7 @@ namespace CheckerApp.Runner.CheckerRunner
 
             var allCheckResultsToReport =
                 checkResults
-                .SelectMany(x => x.Value.Select(c => (ICheck: c.Key, Name: $"{x.Key.Name}.{c.Key.Configuration.Name}({c.Key.Configuration.Type})", CheckResult: c.Value, Reported: false)))
+                .SelectMany(x => x.Value.Select(c => (ICheck: c.Key, Name: $"{x.Key.Name}.{c.Key.Configuration.Name}({c.Key.Configuration.Type})", CheckResult: c.Value)))
                 .ToList();
 
             if (!allCheckResultsToReport.Any())
@@ -451,7 +450,6 @@ namespace CheckerApp.Runner.CheckerRunner
                         : new[] { "*" };
 
                 var checksToReport = allCheckResultsToReport
-                    .Where(x => x.Reported == false)
                     .Where(x =>
                     {
                         var checkReportGroups = x.ICheck.Configuration.ReportGroups?.Any() == true ? x.ICheck.Configuration.ReportGroups : new[] { "*" };
@@ -480,8 +478,6 @@ namespace CheckerApp.Runner.CheckerRunner
                     default:
                         break;
                 }
-
-                checksToReport.ForEach(x => x.Reported = true);
             }
 
             await Task.WhenAll(tasksToWait);
