@@ -1,8 +1,8 @@
 ﻿using Yove.Proxy;
 
-namespace CheckerLib.Common.Helpers
+namespace CheckerLib.Common.Factories
 {
-    public static class ProxyClientProvider
+    public static class ProxyClientFactory
     {
         public static ProxyClient? GetProxyClient(Uri proxyUri)
         {
