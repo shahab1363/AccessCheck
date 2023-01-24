@@ -452,8 +452,12 @@ namespace CheckerApp.Runner.CheckerRunner
                 var checksToReport = allCheckResultsToReport
                     .Where(x =>
                     {
-                        var checkReportGroups = x.ICheck.Configuration.ReportGroups?.Any() == true ? x.ICheck.Configuration.ReportGroups : new[] { "*" };
-                        return reportGroups.Intersect(checkReportGroups).Any();
+                        if (x.ICheck.Configuration.ReportGroups?.Any() == true)
+                        {
+                            return reportGroups.Intersect(x.ICheck.Configuration.ReportGroups).Any();
+                        }
+
+                        return reportGroups.Contains("*");
                     })
                     .ToList();
 
@@ -485,6 +489,7 @@ namespace CheckerApp.Runner.CheckerRunner
 
         private HttpClient HttpClientProvider()
             => HttpClientProvider(null);
+
         private HttpClient HttpClientProvider(Uri? configProxyUri)
         {
             if (configProxyUri == null)
