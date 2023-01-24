@@ -1,15 +1,11 @@
 ﻿using Checker.Checks;
-using Checker.Checks.DnsCheck;
-using Checker.Checks.HttpCheck;
-using Checker.Checks.PingCheck;
-using Checker.Checks.SocketCheck;
-using Checker.Checks.TlsCheck;
 using Checker.Configuration;
 using Checker.Extensions;
 using Checker.Reports.AppInsightReport;
 using Checker.Reports.WebhookReport;
-using CheckerLib.Checks.ExternalAppCheck;
+using CheckerLib.Common.Factories;
 using CheckerLib.Common.Helpers;
+using CheckerLib.Extensions;
 using System.Collections.Concurrent;
 using System.Diagnostics;
 
@@ -24,15 +20,10 @@ namespace CheckerApp.Runner.CheckerRunner
         private CancellationTokenSource cleanUpCTS = new CancellationTokenSource();
 
         private bool _isRunning = false;
-        private Task runningChecksTask = Task.CompletedTask;
         private Task appStartedTask = Task.CompletedTask;
         private Task appShutdownTask = Task.CompletedTask;
-        private Task startBusyTask = Task.CompletedTask;
-        private Task endBusyTask = Task.CompletedTask;
 
-        private Lazy<IDictionary<CheckGroup, List<ICheck>>?> periodicChecks;
-        private Lazy<IDictionary<CheckGroup, List<ICheck>>?> runBeforePeriodicChecks;
-        private Lazy<IDictionary<CheckGroup, List<ICheck>>?> runAfterPeriodicCheck;
+        private Dictionary<CheckerStep, StepCache> checksCache;
 
         public bool IsRunning
         {
@@ -60,7 +51,6 @@ namespace CheckerApp.Runner.CheckerRunner
                     return;
                 }
                 _isBusy = value;
-                IsBusyChanged();
                 IsBusyChange?.Invoke(this, value);
             }
         }
@@ -76,32 +66,16 @@ namespace CheckerApp.Runner.CheckerRunner
             this.clientId = clientId;
             this.scheduler = new Scheduler(configuration.ScheduledRunTime);
 
-            periodicChecks = new Lazy<IDictionary<CheckGroup, List<ICheck>>?>(() =>
-            {
-                if (configuration.PeriodicChecksStep?.CheckGroups?.Any() == true)
-                {
-                    return LoadChecks(configuration.PeriodicChecksStep.CheckGroups);
-                }
-                return null;
-            });
-
-            runBeforePeriodicChecks = new Lazy<IDictionary<CheckGroup, List<ICheck>>?>(() =>
-            {
-                if (configuration.RunBeforePeriodicChecksStep?.CheckGroups?.Any() == true)
-                {
-                    return LoadChecks(configuration.RunBeforePeriodicChecksStep.CheckGroups);
-                }
-                return null;
-            });
-
-            runAfterPeriodicCheck = new Lazy<IDictionary<CheckGroup, List<ICheck>>?>(() =>
-            {
-                if (configuration.RunAfterPeriodicChecksStep?.CheckGroups?.Any() == true)
-                {
-                    return LoadChecks(configuration.RunAfterPeriodicChecksStep.CheckGroups);
-                }
-                return null;
-            });
+            checksCache = configuration.PeriodicChecksSteps.ToDictionary(
+                    s => s,
+                    s => new StepCache(s));
+            //s => new StepCache(s)
+            //    periodicCheks: LoadChecks(s.CheckGroups),
+            //    runningChecksTask: Task.CompletedTask,
+            //    runBeforePeriodicChecks: LoadChecks(s.RunBeforeStep?.CheckGroups),
+            //    runBeforeStepTask: Task.CompletedTask,
+            //    runAfterPeriodicCheck: LoadChecks(s.RunAfterStep?.CheckGroups),
+            //    runAfterStepTask: Task.CompletedTask));
 
             IsInitialized = true;
             return Task.CompletedTask;
@@ -109,12 +83,9 @@ namespace CheckerApp.Runner.CheckerRunner
 
         private async Task AwaitAndGetNewTask(Func<Task> taskFunc, params Task[] tasksToWaitBeforeCreatingNewOne)
         {
-            foreach (var task in tasksToWaitBeforeCreatingNewOne)
+            if (tasksToWaitBeforeCreatingNewOne?.Any() == true)
             {
-                if (!task.IsCompleted)
-                {
-                    await task.ConfigureAwait(false);
-                }
+                await Task.WhenAll(tasksToWaitBeforeCreatingNewOne).ConfigureAwait(false);
             }
 
             await taskFunc();
@@ -128,7 +99,12 @@ namespace CheckerApp.Runner.CheckerRunner
                 {
                     if (configuration.AppStartStep?.CheckGroups?.Any() == true)
                     {
-                        return RunTask(LoadChecks(configuration.AppStartStep.CheckGroups), configuration.AppStartStep, cleanUpCTS.Token);
+                        return RunTask(
+                            configuration.AppStartStep.CheckGroups.LoadCheckGroups(),
+                            configuration.AppStartStep?.MinDuration,
+                            configuration.AppStartStep?.MaxDuration,
+                            configuration.AppStartStep?.SendReport,
+                            cleanUpCTS.Token);
                     }
                     return Task.CompletedTask;
                 }, appStartedTask, appShutdownTask);
@@ -139,36 +115,15 @@ namespace CheckerApp.Runner.CheckerRunner
                 {
                     if (configuration.AppShutdownStep?.CheckGroups?.Any() == true)
                     {
-                        return RunTask(LoadChecks(configuration.AppShutdownStep.CheckGroups), configuration.AppShutdownStep, cleanUpCTS.Token);
+                        return RunTask(
+                            configuration.AppShutdownStep.CheckGroups.LoadCheckGroups(),
+                            configuration.AppShutdownStep?.MinDuration,
+                            configuration.AppShutdownStep?.MaxDuration,
+                            configuration.AppShutdownStep?.SendReport,
+                            cleanUpCTS.Token);
                     }
                     return Task.CompletedTask;
                 }, appShutdownTask, appStartedTask);
-            }
-        }
-
-        private void IsBusyChanged()
-        {
-            if (IsBusy)
-            {
-                startBusyTask = AwaitAndGetNewTask(() =>
-                {
-                    if (runBeforePeriodicChecks.Value != null && runBeforePeriodicChecks.Value.Any())
-                    {
-                        return RunTask(runBeforePeriodicChecks.Value, configuration.RunBeforePeriodicChecksStep, cleanUpCTS.Token);
-                    }
-                    return Task.CompletedTask;
-                }, startBusyTask, endBusyTask);
-            }
-            else
-            {
-                startBusyTask = AwaitAndGetNewTask(() =>
-                {
-                    if (runAfterPeriodicCheck.Value != null && runAfterPeriodicCheck.Value.Any())
-                    {
-                        return RunTask(runAfterPeriodicCheck.Value, configuration.RunAfterPeriodicChecksStep, cleanUpCTS.Token);
-                    }
-                    return Task.CompletedTask;
-                }, endBusyTask, startBusyTask);
             }
         }
 
@@ -191,11 +146,12 @@ namespace CheckerApp.Runner.CheckerRunner
                 {
                     await appStartedTask.ConfigureAwait(false);
                 }
-                runCTS = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
+
+                runCTS = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken, cleanUpCTS.Token);
                 var ct = runCTS.Token;
                 var lastStartTime = DateTime.MinValue;
 
-                if (periodicChecks.Value == null || !periodicChecks.Value.Any())
+                if (configuration.PeriodicChecksSteps?.Any() != true)
                 {
                     return;
                 }
@@ -213,31 +169,25 @@ namespace CheckerApp.Runner.CheckerRunner
                     try
                     {
                         this.IsBusy = true;
-
-                        if (configuration.RunBeforePeriodicChecksStep?.FinishBeforeNextStep ?? false)
+                        foreach (var step in checksCache.Keys)
                         {
-                            await startBusyTask.ConfigureAwait(false); // finish trigger run before strating checks
-                        }
+                            await RunStep(
+                                step,
+                                checksCache[step],
+                                step.MinDuration,
+                                step.MaxDuration,
+                                step.SendReport,
+                                ct).ConfigureAwait(false);
 
-                        if (!runningChecksTask.IsCompleted)
-                        {
-                            await runningChecksTask.ConfigureAwait(false);
-                        }
-
-                        runningChecksTask = RunTask(periodicChecks.Value, configuration.PeriodicChecksStep, ct);
-                        if (configuration.PeriodicChecksStep?.FinishBeforeNextStep ?? true)
-                        {
-                            await runningChecksTask.ConfigureAwait(false);
+                            if (ct.IsCancellationRequested)
+                            {
+                                break;
+                            }
                         }
                     }
                     finally
                     {
                         this.IsBusy = false;
-
-                        if (configuration.RunAfterPeriodicChecksStep?.FinishBeforeNextStep ?? false)
-                        {
-                            await endBusyTask.ConfigureAwait(false); // wait for trigger run to finish before ending current check
-                        }
                     }
                 }
             }
@@ -252,75 +202,71 @@ namespace CheckerApp.Runner.CheckerRunner
             }
         }
 
-        private IDictionary<CheckGroup, List<ICheck>> LoadChecks(CheckGroup[] checkGroups)
+        private async Task RunStep(
+            CheckerStep step,
+            StepCache stepCache,
+            TimeSpan? fallBackMinDuration,
+            TimeSpan? fallBackMaxDuration,
+            bool? fallBackSendReport,
+            CancellationToken ct,
+            params Task[] additionalTaskToWaitBeforeStart)
         {
-            var result = new Dictionary<CheckGroup, List<ICheck>>();
-            foreach (var checkGroup in checkGroups)
+            if (step == null || stepCache == null)
             {
-                var checks = LoadCheckGroup(checkGroup).ToList();
-                if (checks.Any())
-                {
-                    result.Add(checkGroup, checks);
-                }
+                return;
             }
 
-            return result;
-        }
+            var minDuration = step.MinDuration ?? fallBackMinDuration;
+            var maxDuration = step.MaxDuration ?? fallBackMaxDuration;
+            var sendReport = step.SendReport ?? fallBackSendReport;
 
-        private IEnumerable<ICheck> LoadCheckGroup(CheckGroup checkGroup)
-        {
-            foreach (var checkConfiguration in checkGroup.CheckConfigurations)
+            try
             {
-                switch (checkConfiguration.Type)
+                if (step.RunBeforeStep != null && stepCache.BeforeStepCache != null)
                 {
-                    case CheckTypeEnum.RawSocket:
-                        if (checkConfiguration is RawSocketCheckConfiguration rawSocketCheckConfiguration)
-                        {
-                            yield return new RawSocketCheck(rawSocketCheckConfiguration, checkGroup.MinInterval);
-                        }
-                        break;
-                    case CheckTypeEnum.Http:
-                        if (checkConfiguration is HttpCheckConfiguration httpCheckConfiguration)
-                        {
-                            yield return new HttpCheck(httpCheckConfiguration, checkGroup.MinInterval, HttpClientProvider);
-                        }
-                        break;
-                    case CheckTypeEnum.TCP:
-                        if (checkConfiguration is TCPCheckConfiguration tcpCheckConfiguration)
-                        {
-                            yield return new TCPCheck(tcpCheckConfiguration, checkGroup.MinInterval);
-                        }
-                        break;
-                    case CheckTypeEnum.UDP:
-                        if (checkConfiguration is UDPCheckConfiguration udpCheckConfiguration)
-                        {
-                            yield return new UDPCheck(udpCheckConfiguration, checkGroup.MinInterval);
-                        }
-                        break;
-                    case CheckTypeEnum.DNS:
-                        if (checkConfiguration is DnsCheckConfiguration dnsCheckConfiguration)
-                        {
-                            yield return new DnsCheck(dnsCheckConfiguration, checkGroup.MinInterval);
-                        }
-                        break;
-                    case CheckTypeEnum.TLS:
-                        if (checkConfiguration is TLSCheckConfiguration tlsCheckConfiguration)
-                        {
-                            yield return new TLSCheck(tlsCheckConfiguration, checkGroup.MinInterval);
-                        }
-                        break;
-                    case CheckTypeEnum.Ping:
-                        if (checkConfiguration is PingCheckConfiguration pingCheckConfiguration)
-                        {
-                            yield return new PingCheck(pingCheckConfiguration, checkGroup.MinInterval);
-                        }
-                        break;
-                    case CheckTypeEnum.ExternalApp:
-                        if (checkConfiguration is ExternalAppCheckConfiguration externalAppCheckConfiguration)
-                        {
-                            yield return new ExternalAppCheck(externalAppCheckConfiguration, checkGroup.MinInterval);
-                        }
-                        break;
+                    await RunStep(
+                        step.RunBeforeStep,
+                        stepCache.BeforeStepCache,
+                        minDuration,
+                        maxDuration,
+                        sendReport,
+                        ct,
+                        stepCache.AfterStepCache?.RunningTask ?? Task.CompletedTask);
+                }
+
+                var tasksToWaitFor = additionalTaskToWaitBeforeStart?.Any() == true
+                    ? additionalTaskToWaitBeforeStart.Union(new[] { stepCache.RunningTask }).ToArray()
+                    : new[] { stepCache.RunningTask };
+
+                if (stepCache.PeriodicChecks?.Any() == true)
+                {
+                    stepCache.RunningTask = AwaitAndGetNewTask(
+                        () => RunTask(
+                            stepCache.PeriodicChecks,
+                            minDuration,
+                            maxDuration,
+                            sendReport,
+                            ct),
+                        tasksToWaitFor);
+                }
+
+                if (step?.FinishBeforeNextStep == true)
+                {
+                    await stepCache.RunningTask.ConfigureAwait(false);
+                }
+            }
+            finally
+            {
+                if (step.RunAfterStep != null && stepCache.AfterStepCache != null)
+                {
+                    await RunStep(
+                        step.RunAfterStep,
+                        stepCache.AfterStepCache,
+                        minDuration,
+                        maxDuration,
+                        sendReport,
+                        ct,
+                        stepCache.BeforeStepCache?.RunningTask ?? Task.CompletedTask);
                 }
             }
         }
@@ -341,23 +287,22 @@ namespace CheckerApp.Runner.CheckerRunner
 
             await appStartedTask.ConfigureAwait(false);
             await Task.Delay(TimeSpan.FromSeconds(1));
-            await startBusyTask.ConfigureAwait(false);
+
+            await Task.WhenAll(checksCache.Values.Select(c => c.CleanUpTask));
             await Task.Delay(TimeSpan.FromSeconds(1));
-            await runningChecksTask.ConfigureAwait(false);
-            await Task.Delay(TimeSpan.FromSeconds(1));
-            await endBusyTask.ConfigureAwait(false);
-            await Task.Delay(TimeSpan.FromSeconds(1));
+
             await appShutdownTask.ConfigureAwait(false);
         }
 
         private int GetIntervalDelay(DateTime lastStartTime)
             => Math.Max(0, (int)(configuration.Interval - (DateTime.Now - lastStartTime)).TotalMilliseconds);
 
-        private Task RunTask(IDictionary<CheckGroup, List<ICheck>> checksToRun, CheckerStep step, CancellationToken cancellationToken)
-            => RunTask(checksToRun, step?.MinDuration ?? TimeSpan.Zero, step?.MaxDuration ?? TimeSpan.FromDays(30), step?.SendReport ?? true, cancellationToken);
-
-        private async Task RunTask(IDictionary<CheckGroup, List<ICheck>> checksToRun, TimeSpan minDuration, TimeSpan maxDuration, bool sendReport, CancellationToken cancellationToken)
+        private async Task RunTask(IDictionary<CheckGroup, List<ICheck>> checksToRun, TimeSpan? minDurationN, TimeSpan? maxDurationN, bool? sendReportN, CancellationToken cancellationToken)
         {
+            var minDuration = minDurationN ?? TimeSpan.Zero;
+            var maxDuration = maxDurationN ?? TimeSpan.FromDays(30);
+            var sendReport = sendReportN ?? true;
+
             if (maxDuration == TimeSpan.Zero)
             {
                 maxDuration = TimeSpan.FromDays(30);
@@ -468,7 +413,7 @@ namespace CheckerApp.Runner.CheckerRunner
                     case Checker.Reports.ReportTypeEnum.Webhook:
                         if (reportConfiguration is WebhookReportConfiguration webhookReportConfiguration)
                         {
-                            var webhookReport = new WebhookReport(webhookReportConfiguration, HttpClientProvider, clientId);
+                            var webhookReport = new WebhookReport(webhookReportConfiguration, HttpClientFactory.HttpClientProvider, clientId);
                             tasksToWait.Add(webhookReport.ReportResult(reportListKVs, cancellationToken));
                         }
                         break;
@@ -486,35 +431,5 @@ namespace CheckerApp.Runner.CheckerRunner
 
             await Task.WhenAll(tasksToWait);
         }
-
-        private HttpClient HttpClientProvider()
-            => HttpClientProvider(null);
-
-        private HttpClient HttpClientProvider(Uri? configProxyUri)
-        {
-            if (configProxyUri == null)
-            {
-                configProxyUri = new Uri("noproxy://");
-            }
-
-            return proxiedHttpClientPool.GetOrAdd(configProxyUri, (proxyUri) =>
-            {
-                var socketHandler = new SocketsHttpHandler()
-                {
-                    PooledConnectionLifetime = TimeSpan.FromMinutes(2), // Recreate every 2 minutes
-                };
-
-                var proxyClient = ProxyClientProvider.GetProxyClient(proxyUri);
-                if (proxyClient != null)
-                {
-                    socketHandler.Proxy = proxyClient;
-                }
-
-                return new HttpClient(socketHandler);
-            });
-        }
-
-        private static ConcurrentDictionary<Uri, HttpClient> proxiedHttpClientPool = new ConcurrentDictionary<Uri, HttpClient>();
-
     }
 }
