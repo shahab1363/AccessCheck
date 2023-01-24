@@ -13,160 +13,164 @@ using System.Text.Json;
 
 var configuration = new CheckerConfiguration
 {
-    RunBeforePeriodicChecksStep = new CheckerStep
+
+    PeriodicChecksSteps = new[]
     {
-        CheckGroups = new[] {
-            new CheckGroup
+        new CheckerStep
             {
-                Name = "StartVPN",
-                CheckConfigurations = new Checker.Checks.ICheckConfiguration[]
+                RunBeforeStep = new CheckerStep
                 {
-                    new ExternalAppCheckConfiguration
+                    CheckGroups = new[] {
+                    new CheckGroup
                     {
-                        Name = "LaunchVPN",
-                        Command = "..\\..\\..\\sscli\\Debug\\net6.0\\sscli.exe",
-                        Args = "c --listen-socks 127.0.0.1:8888".Split(" "),
-                        WaitForExit = false,
-                        KillIfRunningAfterWait = false,
-                        CaptureStdOut = true,
-                        CaptureStdError = true,
-                        ExternalAppValidations = new[]
+                        Name = "StartVPN",
+                        CheckConfigurations = new Checker.Checks.ICheckConfiguration[]
                         {
-                            new ExpectExitCode
+                            new ExternalAppCheckConfiguration
                             {
-                                ExpectedExitCodes = new int?[] {
-                                    null,
-                                    999
+                                Name = "LaunchVPN",
+                                Command = "..\\..\\..\\sscli\\Debug\\net6.0\\sscli.exe",
+                                Args = "c --listen-socks 127.0.0.1:8888".Split(" "),
+                                WaitForExit = false,
+                                KillIfRunningAfterWait = false,
+                                CaptureStdOut = true,
+                                CaptureStdError = true,
+                                ExternalAppValidations = new[]
+                                {
+                                    new ExpectExitCode
+                                    {
+                                        ExpectedExitCodes = new int?[] {
+                                            null,
+                                            999
+                                        },
+                                    }
                                 },
-                            }
-                        },
-                        MinWait = TimeSpan.FromSeconds(5),
-                    }
-                }
-            }
-        },
-        MinDuration = TimeSpan.FromSeconds(10),
-        FinishBeforeNextStep = true,
-        SendReport = true,
-    },
-    PeriodicChecksStep = new CheckerStep
-    {
-        CheckGroups = new[]
-        {
-            new CheckGroup
-            {
-                Name = "Facebook",
-                Order = 1,
-                MinInterval = TimeSpan.FromSeconds(30),
-                CheckConfigurations = new Checker.Checks.ICheckConfiguration[]
-                {
-                    new DnsCheckConfiguration
-                    {
-                        Name = "DNSCheck",
-                        Order = 1001,
-                        HostNameOrAddress = "facebook.com",
-                        IPValidations = new[]
-                        {
-                            new MustNotContain
-                            {
-                                StringToCheck = "10.10.34.34"
+                                MinWait = TimeSpan.FromSeconds(5),
                             }
                         }
-                    },
-                    new HttpCheckConfiguration
-                    {
-                        Name = "HttpCheck",
-                        Order = 1002,
-                        HttpMethod = Checker.Checks.HttpCheck.HttpMethodEnum.Get,
-                        Uris = new[] {
-                            new Uri("https://facebook.com"),
-                            new Uri("https://fb.com")
-                        },
-                        HttpValidations = new IHttpValidation[]
-                        {
-                            new MustContain
-                            {
-                                Name = "MustContainsFBCDN.NET",
-                                StringToCheck = "fbcdn.net/"
-                            },
-                            new ExpectStatusCodes
-                            {
-                                ExpectedStatusCodes = new[] { 200 }
-                            },
-                            new ExpectContentLength
-                            {
-                                ExpectedContentLength = 1000,
-                                ThresholdPercent= 100000
-                            }
-                        },
-                        ProxyUri = new Uri("socks5://127.0.0.1:8888"),
-                        PerUriTimeOut = TimeSpan.FromMinutes(2),
-                        TimeOut = TimeSpan.FromMinutes(10),
-                    },
-                    new TLSCheckConfiguration
-                    {
-                        Name = "TLSCheck",
-                        Order = 1003,
-                        HostName = "facebook.com",
-                        SslProtocol = System.Security.Authentication.SslProtocols.None,
-                        EncryptionPolicy = System.Net.Security.EncryptionPolicy.RequireEncryption
-                    },
-                    new PingCheckConfiguration
-                    {
-                        Name = "PingCheck",
-                        Order = 1004,
-                        HostNames = new[] { "facebook.com", "fb.com" },
-                    },
-                }
+                    }
+                },
+                MinDuration = TimeSpan.FromSeconds(10),
+                FinishBeforeNextStep = true,
+                SendReport = true,
             },
-        },
-        FinishBeforeNextStep = true,
-        SendReport = true,
-    },
-    RunAfterPeriodicChecksStep = new CheckerStep
-    {
-        CheckGroups = new[] {
-            new CheckGroup
+            CheckGroups = new[]
             {
-                Name = "StopVPN",
-                CheckConfigurations = new Checker.Checks.ICheckConfiguration[]
+                new CheckGroup
                 {
-                    new ExternalAppCheckConfiguration
+                    Name = "Facebook",
+                    Order = 1,
+                    MinInterval = TimeSpan.FromSeconds(30),
+                    CheckConfigurations = new Checker.Checks.ICheckConfiguration[]
                     {
-                        Name="KillVPN",
-                        Command = "taskkill",
-                        Args= "/im sscli.exe /F".Split(" "),
-                        WaitForExit = true,
-                        MinWait = TimeSpan.Zero,
-                        KillIfRunningAfterWait = true,
-                        CaptureStdOut = true,
-                        CaptureStdError = true,
-                        ExternalAppValidations = new IExternalAppValidation[]
+                        new DnsCheckConfiguration
                         {
-                            new ExpectExitCode
+                            Name = "DNSCheck",
+                            Order = 1001,
+                            HostNameOrAddress = "facebook.com",
+                            IPValidations = new[]
                             {
-                                Name = "ExpectExitCode0",
-                                ExpectedExitCodes = new int?[]{ 0 },
+                                new MustNotContain
+                                {
+                                    StringToCheck = "10.10.34.34"
+                                }
+                            }
+                        },
+                        new HttpCheckConfiguration
+                        {
+                            Name = "HttpCheck",
+                            Order = 1002,
+                            HttpMethod = Checker.Checks.HttpCheck.HttpMethodEnum.Get,
+                            Uris = new[] {
+                                new Uri("https://facebook.com"),
+                                new Uri("https://fb.com")
                             },
-                            new MustContain
+                            HttpValidations = new IHttpValidation[]
                             {
-                                Name = "MustContainSuccess",
-                                CaseSensitive = false,
-                                StringToCheck = "SUCCESS: The process"
+                                new MustContain
+                                {
+                                    Name = "MustContainsFBCDN.NET",
+                                    StringToCheck = "fbcdn.net/"
+                                },
+                                new ExpectStatusCodes
+                                {
+                                    ExpectedStatusCodes = new[] { 200 }
+                                },
+                                new ExpectContentLength
+                                {
+                                    ExpectedContentLength = 1000,
+                                    ThresholdPercent= 100000
+                                }
                             },
-                            new MustContain
+                            ProxyUri = new Uri("socks5://127.0.0.1:8888"),
+                            PerUriTimeOut = TimeSpan.FromMinutes(2),
+                            TimeOut = TimeSpan.FromMinutes(10),
+                        },
+                        new TLSCheckConfiguration
+                        {
+                            Name = "TLSCheck",
+                            Order = 1003,
+                            HostName = "facebook.com",
+                            SslProtocol = System.Security.Authentication.SslProtocols.None,
+                            EncryptionPolicy = System.Net.Security.EncryptionPolicy.RequireEncryption
+                        },
+                        new PingCheckConfiguration
+                        {
+                            Name = "PingCheck",
+                            Order = 1004,
+                            HostNames = new[] { "facebook.com", "fb.com" },
+                        },
+                    }
+                },
+            },
+            RunAfterStep = new CheckerStep
+            {
+                CheckGroups = new[] {
+                    new CheckGroup
+                    {
+                        Name = "StopVPN",
+                        CheckConfigurations = new Checker.Checks.ICheckConfiguration[]
+                        {
+                            new ExternalAppCheckConfiguration
                             {
-                                Name = "MustContainHasBeenTerminated",
-                                CaseSensitive = false,
-                                StringToCheck = "has been terminated."
+                                Name="KillVPN",
+                                Command = "taskkill",
+                                Args= "/im sscli.exe /F".Split(" "),
+                                WaitForExit = true,
+                                MinWait = TimeSpan.Zero,
+                                KillIfRunningAfterWait = true,
+                                CaptureStdOut = true,
+                                CaptureStdError = true,
+                                ExternalAppValidations = new IExternalAppValidation[]
+                                {
+                                    new ExpectExitCode
+                                    {
+                                        Name = "ExpectExitCode0",
+                                        ExpectedExitCodes = new int?[]{ 0 },
+                                    },
+                                    new MustContain
+                                    {
+                                        Name = "MustContainSuccess",
+                                        CaseSensitive = false,
+                                        StringToCheck = "SUCCESS: The process"
+                                    },
+                                    new MustContain
+                                    {
+                                        Name = "MustContainHasBeenTerminated",
+                                        CaseSensitive = false,
+                                        StringToCheck = "has been terminated."
+                                    }
+                                }
                             }
                         }
                     }
-                }
-            }
+                },
+                MaxDuration = TimeSpan.FromSeconds(30),
+                SendReport = true,
+            },
+            FinishBeforeNextStep = true,
+            SendReport = true,
         },
-        MaxDuration = TimeSpan.FromSeconds(30),
-        SendReport = true,
     },
     ReportConfigurations = new Checker.Reports.IReportConfiguration[]
     {
