@@ -1,6 +1,7 @@
 ﻿using Checker.Checks;
 using Checker.Common.Exceptions;
 using Checker.Extensions;
+using CheckerLib.Common.Logger;
 using System.Diagnostics;
 
 namespace CheckerLib.Checks.ExternalAppCheck
@@ -59,7 +60,6 @@ namespace CheckerLib.Checks.ExternalAppCheck
                 return CheckResult.FromException(this.GetType().Name, exception);
             }
         }
-
 
         private async Task<CheckResult> InternalAppRunCheck(CancellationToken ct)
         {
@@ -196,6 +196,7 @@ namespace CheckerLib.Checks.ExternalAppCheck
 
             var stopWatch = Stopwatch.StartNew();
 
+            Log.Debug($"Starting {basePath}\\{command}");
             p.Start();
 
             // To avoid deadlocks, use an asynchronous read operation on at least one of the streams.  
@@ -219,6 +220,7 @@ namespace CheckerLib.Checks.ExternalAppCheck
             }
 
             var exitCode = p.HasExited ? p.ExitCode : (int?)null;
+            Log.Debug($"Returning exit code: {exitCode?.ToString() ?? "[NULL]"} for {command}");
 
             return (exitCode, captureStdOut ? stdOut : null, captureStdErr ? stdErr : null);
         }
