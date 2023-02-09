@@ -4,6 +4,8 @@ namespace CheckerLib.Common.Logger
 {
     public class Log
     {
+        public static ConsoleColor DefaultConsoleColor = Console.ForegroundColor;
+
         public static void Debug(CallerInfo callerInfo, string message, params object[] formatParams)
             => InternalLog(callerInfo, LogLevel.Debug, message, formatParams);
         public static void Debug(string message, object[]? formatParams = null, [CallerMemberName] string memberName = "", [CallerFilePath] string filePath = "", [CallerLineNumber] int lineNumber = 0)
@@ -36,7 +38,31 @@ namespace CheckerLib.Common.Logger
                 message = string.Format(message, formatParams);
             }
 
-            Console.WriteLine($"{DateTime.Now:u} [{logLevel}]\t[{callerInfo}]\t{message}");
+            Console.ForegroundColor = DefaultConsoleColor;
+            Console.Write($"{DateTime.Now:u} ");
+           
+            switch (logLevel)
+            {
+                case LogLevel.Debug:
+                    Console.ForegroundColor = ConsoleColor.DarkGray;
+                    break;
+                case LogLevel.Info:
+                    Console.ForegroundColor = ConsoleColor.Gray;
+                    break;
+                case LogLevel.Warn:
+                    Console.ForegroundColor = ConsoleColor.Yellow;
+                    break;
+                case LogLevel.Error:
+                    Console.ForegroundColor = ConsoleColor.Red;
+                    break;
+                case LogLevel.Fatal:
+                    Console.ForegroundColor = ConsoleColor.DarkRed;
+                    break;
+            }
+            Console.Write($"[{logLevel}]");
+
+            Console.ForegroundColor = DefaultConsoleColor;
+            Console.WriteLine($"\t[{callerInfo}] {message}");
         }
     }
 }
