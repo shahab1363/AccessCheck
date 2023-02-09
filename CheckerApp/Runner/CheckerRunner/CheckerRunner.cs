@@ -5,6 +5,7 @@ using Checker.Reports.AppInsightReport;
 using Checker.Reports.WebhookReport;
 using CheckerLib.Common.Factories;
 using CheckerLib.Common.Helpers;
+using CheckerLib.Common.Logger;
 using CheckerLib.Extensions;
 using System.Collections.Concurrent;
 using System.Diagnostics;
@@ -62,6 +63,7 @@ namespace CheckerApp.Runner.CheckerRunner
 
         public Task Initialize(CheckerConfiguration configuration, string clientId)
         {
+            Log.Info($"Initializing runner");
             this.configuration = configuration;
             this.clientId = clientId;
             this.scheduler = new Scheduler(configuration.ScheduledRunTime);
@@ -95,6 +97,7 @@ namespace CheckerApp.Runner.CheckerRunner
         {
             if (IsRunning)
             {
+                Log.Info($"IsRunning changed, new value: {IsRunning}. Starting app start checks");
                 appStartedTask = AwaitAndGetNewTask(() =>
                 {
                     if (configuration.AppStartStep?.CheckGroups?.Any() == true)
@@ -111,7 +114,8 @@ namespace CheckerApp.Runner.CheckerRunner
             }
             else
             {
-                appStartedTask = AwaitAndGetNewTask(() =>
+                Log.Info($"IsRunning changed, new value: {IsRunning}. Starting app shutdown checks");
+                appShutdownTask = AwaitAndGetNewTask(() =>
                 {
                     if (configuration.AppShutdownStep?.CheckGroups?.Any() == true)
                     {
@@ -169,8 +173,11 @@ namespace CheckerApp.Runner.CheckerRunner
                     try
                     {
                         this.IsBusy = true;
+                        var index = 0;
                         foreach (var step in checksCache.Keys)
                         {
+                            index++;
+                            Log.Info($"Running step {step.Name ?? index.ToString()}");
                             await RunStep(
                                 step,
                                 checksCache[step],
@@ -224,6 +231,7 @@ namespace CheckerApp.Runner.CheckerRunner
             {
                 if (step.RunBeforeStep != null && stepCache.BeforeStepCache != null)
                 {
+                    Log.Info($"Running pre-run step");
                     await RunStep(
                         step.RunBeforeStep,
                         stepCache.BeforeStepCache,
@@ -252,6 +260,7 @@ namespace CheckerApp.Runner.CheckerRunner
 
                 if (step?.FinishBeforeNextStep == true)
                 {
+                    Log.Debug($"Waiting for step to finish");
                     await stepCache.RunningTask.ConfigureAwait(false);
                 }
             }
@@ -259,6 +268,7 @@ namespace CheckerApp.Runner.CheckerRunner
             {
                 if (step.RunAfterStep != null && stepCache.AfterStepCache != null)
                 {
+                    Log.Info($"Running post-run step");
                     await RunStep(
                         step.RunAfterStep,
                         stepCache.AfterStepCache,
@@ -273,6 +283,7 @@ namespace CheckerApp.Runner.CheckerRunner
 
         public Task Stop()
         {
+            Log.Info("Got Stop");
             if (IsRunning)
             {
                 runCTS?.Cancel();
@@ -283,6 +294,7 @@ namespace CheckerApp.Runner.CheckerRunner
 
         public async Task Cleanup(CancellationToken cancellationToken)
         {
+            Log.Info("Cleaning up");
             cancellationToken.Register(() => cleanUpCTS.Cancel());
 
             await appStartedTask.ConfigureAwait(false);
@@ -297,11 +309,10 @@ namespace CheckerApp.Runner.CheckerRunner
         private int GetIntervalDelay(DateTime lastStartTime)
             => Math.Max(0, (int)(configuration.Interval - (DateTime.Now - lastStartTime)).TotalMilliseconds);
 
-        private async Task RunTask(IDictionary<CheckGroup, List<ICheck>> checksToRun, TimeSpan? minDurationN, TimeSpan? maxDurationN, bool? sendReportN, CancellationToken cancellationToken)
+        private async Task RunTask(IDictionary<CheckGroup, List<ICheck>> checksToRun, TimeSpan? minDurationN, TimeSpan? maxDurationN, bool? sendReport, CancellationToken cancellationToken)
         {
             var minDuration = minDurationN ?? TimeSpan.Zero;
             var maxDuration = maxDurationN ?? TimeSpan.FromDays(30);
-            var sendReport = sendReportN ?? true;
 
             if (maxDuration == TimeSpan.Zero)
             {
@@ -311,17 +322,21 @@ namespace CheckerApp.Runner.CheckerRunner
             var maxDurationCTS = new CancellationTokenSource(maxDuration);
             var ct = CancellationTokenSource.CreateLinkedTokenSource(maxDurationCTS.Token, cancellationToken).Token;
 
+            Log.Info($"Running checks for check groups: {checksToRun.Count} check groups to run");
+
             var stopwatch = Stopwatch.StartNew();
             var checkResults = await RunChecks(checksToRun, ct);
 
-            if (sendReport)
+            if (sendReport ?? true)
             {
+                Log.Info($"Sending reports: {checkResults.Count} reports to send");
                 await SendReport(clientId, stopwatch.Elapsed, checkResults, ct);
             }
 
             var waitFor = minDuration - stopwatch.Elapsed;
             if (waitFor > TimeSpan.Zero)
             {
+                Log.Info($"Waiting for {waitFor}");
                 await Task.Delay(waitFor, ct);
             }
         }
@@ -351,6 +366,7 @@ namespace CheckerApp.Runner.CheckerRunner
                 try
                 {
                     var runResult = await check.RunCheck(cancellationToken);
+                    Log.Info($"Finished check {checkKV.Key.Name}:{checkKV.Value.Configuration.Name} ({checkKV.Value.Configuration.Type} - Result: {runResult.Result} [{runResult.Description}]");
                     groupResultsDic.TryAdd(check, runResult);
                 }
                 catch (Exception exc)
@@ -383,7 +399,6 @@ namespace CheckerApp.Runner.CheckerRunner
             foreach (var checkResult in allCheckResultsToReport)
             {
                 addedTags.ForEach(kv => checkResult.CheckResult.Tags.TryAdd(kv.Key, kv.Value));
-
             }
 
             var tasksToWait = new List<Task>();
@@ -405,6 +420,8 @@ namespace CheckerApp.Runner.CheckerRunner
                         return reportGroups.Contains("*");
                     })
                     .ToList();
+
+                Log.Info($"Reporting {checksToReport.Count} check results to {reportConfiguration.Name}");
 
                 var reportListKVs = checksToReport.Select(x => new KeyValuePair<string, CheckResult>(x.Name, x.CheckResult));
 

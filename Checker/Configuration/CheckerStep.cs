@@ -2,6 +2,7 @@
 {
     public class CheckerStep
     {
+        public string Name { get; set; }
         public CheckerStep RunBeforeStep { get; set; }
         public CheckGroup[] CheckGroups { get; set; }
         public CheckerStep RunAfterStep { get; set; }
