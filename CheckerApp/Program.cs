@@ -4,11 +4,12 @@ using CheckerApp.Configuration;
 using CheckerApp.Runner;
 using CheckerApp.Runner.CheckerRunner;
 using CheckerApp.Runner.DummyRunner;
+using CheckerLib.Common.Factories;
 using CheckerLib.Common.Helpers;
+using CheckerLib.Common.Logger;
 using ClientId;
 using Microsoft.Extensions.Configuration;
 using System.Text.Json;
-using System.Text.Json.Serialization;
 
 namespace CheckerApp
 {
@@ -18,8 +19,7 @@ namespace CheckerApp
         static IRunner activeRunner;
         static CancellationTokenSource ctsRun, ctsCleanup;
 
-        private const bool IncludeUserInformationInGeneratedDeviceId = true;
-        static Task Main(string[] args)
+        static async Task Main(string[] args)
         {
             Console.CancelKeyPress += async (sender, e) =>
             {
@@ -33,7 +33,7 @@ namespace CheckerApp
 
                     ctsRun?.Cancel();
 
-                    Log("End requested, will end after cleanup. Press Ctrl+C again to cancel cleanup.", true);
+                    Log.Info("End requested, will end after cleanup. Press Ctrl+C again to cancel cleanup.");
                     e.Cancel = true;
                 }
                 else
@@ -46,11 +46,11 @@ namespace CheckerApp
             var appsettingsFile = "appsettings.json";
             var jsonSettings = File.ReadAllText(Path.Combine(basePath, appsettingsFile));
 
-            var generalAppConfig = JsonSerializer.Deserialize<AppConfig>(jsonSettings);
+            var appConfigFromJson = JsonSerializer.Deserialize<AppConfig>(jsonSettings);
 
             var config = new ConfigurationBuilder()
-                .SetBasePath(basePath)
-                .AddJsonFile(appsettingsFile, optional: false, reloadOnChange: false)
+                //.SetBasePath(basePath)
+                //.AddJsonFile(appsettingsFile, optional: false, reloadOnChange: false)
                 .AddEnvironmentVariables("CHECKER_")
                 .AddCommandLine(args)
                 //.AddCommandLine(args, new Dictionary<string, string>
@@ -63,38 +63,48 @@ namespace CheckerApp
 
             var appGuid = config.GetValue( // first try to get config from environment variables or command line
                 "AppGuid",
-                generalAppConfig == null || generalAppConfig.AppGuid == Guid.Empty // if not found, will use value from json config
+                appConfigFromJson?.AppGuid == null || appConfigFromJson.AppGuid == Guid.Empty // if not found, will use value from json config
                     ? new Guid("53596D38-FD48-4024-AB5A-2E378691F1AF") // or use default value if still not found
-                    : generalAppConfig.AppGuid);
+                    : appConfigFromJson.AppGuid);
 
             using (Mutex mutex = new Mutex(false, "Global\\" + appGuid))
             {
                 if (!mutex.WaitOne(0, false))
                 {
-                    Log("Another instance of the application is already running");
-                    return Task.CompletedTask;
+                    Log.Fatal("Another instance of the application is already running");
+                    return;
                 }
 
                 DumpVersionInformation();
                 DumpNetworkInformation();
 
-                var con = config.Get<AppConfig<CheckerConfiguration>>();
-                var runnerType = config.GetValue("runner", "checker") ?? "checker";
-
-                var serializationOptions = SerializationExtensions.GetDefaultSerializationOptions();
-
-                if (runnerType.Equals("dummy", StringComparison.OrdinalIgnoreCase))
+                var clientId = config.GetValue("ClientId", string.Empty);
+                if (string.IsNullOrEmpty(clientId))
                 {
-                    return StartProgram(new DummyRunner(), new AppConfig<DummyRunnerConfig>());
+                    var includeUserInformationInGeneratedDeviceId = config.GetValue("IncludeUserInformationInGeneratedDeviceId", appConfigFromJson?.IncludeUserInformationInGeneratedDeviceId ?? true);
+                    clientId = ClientIdProvider.GetUniqueId(includeUserInformationInGeneratedDeviceId);
                 }
 
-                var checkerAppConfig = JsonSerializer.Deserialize<AppConfig<CheckerConfiguration>>(jsonSettings, serializationOptions);
+                var runnerType = config.GetValue("RunnerType", appConfigFromJson?.RunnerType ?? RunnerType.Checker);
 
-                return StartProgram(new CheckerRunner(), checkerAppConfig);
+
+                switch (runnerType)
+                {
+                    case RunnerType.Checker:
+                        var checkerAppConfig = await GetConfiguration<CheckerConfiguration>(jsonSettings);
+                        await StartProgram(new CheckerRunner(), checkerAppConfig, clientId);
+                        break;
+                    case RunnerType.Dummy:
+                        var dummyRunnerConfig = await GetConfiguration<DummyRunnerConfig>(jsonSettings) ?? new RunnerConfig<DummyRunnerConfig>();
+                        await StartProgram(new DummyRunner(), dummyRunnerConfig, clientId);
+                        break;
+                    default:
+                        break;
+                }
             }
         }
 
-        static async Task StartProgram<T>(IRunner<T> runner, AppConfig<T>? appConfig)
+        static async Task StartProgram<T>(IRunner<T> runner, RunnerConfig<T>? runnerConfig, string clientId)
         {
             activeRunner = runner;
 
@@ -102,11 +112,13 @@ namespace CheckerApp
             {
                 if (isRunning)
                 {
-                    // run start running
+                    // start running
+                    Log.Info("App Started");
                 }
                 else
                 {
-                    // run end running
+                    // end running
+                    Log.Info("App Stopped");
                 }
             };
 
@@ -114,32 +126,29 @@ namespace CheckerApp
             {
                 if (isBusy)
                 {
-                    // run start busy
+                    // start busy
+                    Log.Info("Checker Started");
                 }
                 else
                 {
-                    // run end busy
+                    // end busy
+                    Log.Info("Checker Finished");
                 }
             };
 
             ctsRun = new CancellationTokenSource();
             ctsCleanup = new CancellationTokenSource();
 
-            if (appConfig == null || appConfig.RunnerConfiguration == null)
+            if (runnerConfig == null || runnerConfig.RunnerConfiguration == null)
             {
                 throw new Exception("Invalid configuration file provided");
             }
 
-            if (string.IsNullOrEmpty(appConfig.ClientId))
-            {
-                appConfig.ClientId = ClientIdProvider.GetUniqueId(IncludeUserInformationInGeneratedDeviceId);
-            }
+            Log.Info($"Client Id: {clientId}");
 
-            Log("Client Id: {0}", appConfig.ClientId);
+            Log.Info("Press Ctrl+C to end the app");
 
-            Log("Press Ctrl+C to end the app", true);
-
-            await runner.Initialize(appConfig.RunnerConfiguration, appConfig.ClientId);
+            await runner.Initialize(runnerConfig.RunnerConfiguration, clientId);
 
             // todo: add tasks to run before and after runner - initialize, cleanup
 
@@ -150,77 +159,81 @@ namespace CheckerApp
             }
             catch (TaskCanceledException)
             {
-                Log("Run was interrupted");
+                Log.Warn("Run was interrupted [Cancelled]");
             }
 
             //Program.ExitEvent.Wait();
 
-            Log("Starting clean up");
+            Log.Info("Starting clean up");
             try
             {
                 await runner.Cleanup(ctsCleanup.Token);
             }
             catch (TaskCanceledException)
             {
-                Log("Clean up was interrupted");
+                Log.Warn("Clean up was interrupted [Cancelled]");
             }
 
-            Log("Application terminated");
+            Log.Info("Application terminated");
             PressAnyKey();
         }
 
-        private static void Log()
+        private static async Task<RunnerConfig<T>?> GetConfiguration<T>(string jsonSettings)
         {
-            // todo: replace these methods with appropriate log library methods
-            Console.WriteLine();
+            Log.Info($"Loading configuration");
+            var serializationOptions = SerializationExtensions.GetDefaultSerializationOptions();
+            var config = JsonSerializer.Deserialize<RunnerConfig<T>>(jsonSettings, serializationOptions);
+            if (config?.RemoteRunnerConfiguration != null)
+            {
+                var remoteConfig = await GetRemoteConfig<T>(config.RemoteRunnerConfiguration);
+                if (remoteConfig != null)
+                {
+                    config.RunnerConfiguration = remoteConfig;
+                }
+            }
+
+            return config;
         }
 
-        private static void Log(string message, params string[]? formatArgs)
+        private static async Task<T?> GetRemoteConfig<T>(Uri remoteConfigUri)
         {
-            // todo: replace these methods with appropriate log library methods
-            if (formatArgs?.Any() == true)
+            Log.Info($"Fetching remote config from: {remoteConfigUri}");
+            var httpClient = HttpClientFactory.HttpClientProvider();
+            if (httpClient != null)
             {
-                Console.WriteLine(message, formatArgs);
-            }
-            else
-            {
-                Console.WriteLine(message);
-            }
-        }
-        private static void Log(string message, bool onlyInteractive, params string[]? formatArgs)
-        {
-            // todo: replace these methods with appropriate log library methods
-            if (!onlyInteractive || Environment.UserInteractive)
-            {
-                if (formatArgs != null)
+                var request = new HttpRequestMessage(HttpMethod.Get, remoteConfigUri);
+                var response = await httpClient.SendAsync(request);
+                if (response.IsSuccessStatusCode)
                 {
-                    Console.WriteLine(message, formatArgs);
-                }
-                else
-                {
-                    Console.WriteLine(message);
+                    var responseContent = await response.Content.ReadAsStringAsync();
+                    var serializationOptions = SerializationExtensions.GetDefaultSerializationOptions();
+                    var deserializedResponse = JsonSerializer.Deserialize<T>(responseContent, serializationOptions);
+                    if (deserializedResponse != null)
+                    {
+                        return deserializedResponse;
+                    }
                 }
             }
+
+            return default;
         }
 
         private static void DumpVersionInformation()
         {
-            SystemInformation.GetVersionInformation().ForEach(line => Log(line));
-            Log();
+            SystemInformation.GetVersionInformation().ForEach(line => Log.Info(line));
         }
 
         private static void DumpNetworkInformation()
         {
-            Log("Network Information:");
-            SystemInformation.GetNetworkInformation().ForEach(line => Log(line));
-            Log();
+            Log.Info("Network Information:");
+            SystemInformation.GetNetworkInformation().ForEach(line => Log.Info(line));
         }
 
         private static void PressAnyKey()
         {
             if (Environment.UserInteractive)
             {
-                Log("Press any key to continue", true);
+                Log.Info("Press any key to continue");
                 Console.ReadKey(true);
             }
         }
